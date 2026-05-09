@@ -204,3 +204,44 @@ class BoxHandler:
         # キャッシュを更新（IDは変わらないが念のため）
         self._cached_file_id = updated_file.id
         return f"https://app.box.com/file/{updated_file.id}"
+
+    # ------------------------------------------------------------------
+    # 引合い情報の一覧取得
+    # ------------------------------------------------------------------
+
+    def get_recent_inquiries(self, limit: int = 10) -> list[dict]:
+        """
+        BoxのExcelファイルから最近の引合い情報を取得する。
+
+        Args:
+            limit: 取得する最大件数（末尾から）
+
+        Returns:
+            各行を {ヘッダー: 値} の辞書にしたリスト（新しい順）
+        """
+        file_id = self._find_file_id()
+        if not file_id:
+            return []
+
+        file_content: bytes = self.client.file(file_id).content()
+        buf = io.BytesIO(file_content)
+        wb = openpyxl.load_workbook(buf, read_only=True, data_only=True)
+        ws = wb.active
+
+        rows = list(ws.iter_rows(values_only=True))
+        if len(rows) < 2:
+            # ヘッダー行しかない（データなし）
+            return []
+
+        headers = [str(h) if h is not None else "" for h in rows[0]]
+        data_rows = rows[1:]  # ヘッダーを除いたデータ行
+
+        # 新しい順で limit 件取得
+        recent = data_rows[-limit:][::-1]
+
+        result = []
+        for row in recent:
+            record = {headers[i]: (str(v) if v is not None else "") for i, v in enumerate(row)}
+            result.append(record)
+
+        return result
